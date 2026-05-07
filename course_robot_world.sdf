@@ -1,0 +1,184 @@
+<?xml version="1.0" ?>
+<sdf version="1.9">
+  <world name="course_world">
+    <physics name="1ms" type="ignored">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+    </physics>
+
+    <plugin filename="gz-sim-physics-system" name="gz::sim::systems::Physics"/>
+    <plugin filename="gz-sim-user-commands-system" name="gz::sim::systems::UserCommands"/>
+    <plugin filename="gz-sim-scene-broadcaster-system" name="gz::sim::systems::SceneBroadcaster"/>
+    <plugin filename="gz-sim-sensors-system" name="gz::sim::systems::Sensors"/>
+
+    <gravity>0 0 -9.8</gravity>
+
+    <light type="directional" name="sun">
+      <pose>0 0 10 0 0 0</pose>
+      <diffuse>0.8 0.8 0.8 1</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+      <direction>-0.5 0.1 -0.9</direction>
+    </light>
+
+    <model name="ground_plane">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>100 100</size>
+            </plane>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>100 100</size>
+            </plane>
+          </geometry>
+          <material>
+            <ambient>0.8 0.8 0.8 1</ambient>
+            <diffuse>0.8 0.8 0.8 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <include>
+      <uri>model://course_robot</uri>
+      <name>course_robot</name>
+      <!-- Start position (blue circle on your map): bottom-center; yaw +π/2 = 90° влево (вид сверху) -->
+      <pose>0 -4.6 0.36 0 0 1.5708</pose>
+    </include>
+
+    <!-- Modernized RL world: corridor-like arena matching the provided map. -->
+    <model name="rl_arena_walls">
+      <static>true</static>
+      <!-- Arena inner size: 2m (X) x 10m (Y), wall thickness: 0.10m, height: 0.50m -->
+      <pose>0 0 0 0 0 0</pose>
+      <link name="walls">
+        <pose>0 0 0.25 0 0 0</pose>
+
+        <!-- North wall (top) -->
+        <collision name="north_collision">
+          <pose>0 5.05 0 0 0 0</pose>
+          <geometry><box><size>2.2 0.1 0.5</size></box></geometry>
+        </collision>
+        <visual name="north_visual">
+          <pose>0 5.05 0 0 0 0</pose>
+          <geometry><box><size>2.2 0.1 0.5</size></box></geometry>
+          <material><ambient>0.8 0.1 0.1 1</ambient><diffuse>0.8 0.1 0.1 1</diffuse></material>
+        </visual>
+
+        <!-- South wall (bottom) -->
+        <collision name="south_collision">
+          <pose>0 -5.05 0 0 0 0</pose>
+          <geometry><box><size>2.2 0.1 0.5</size></box></geometry>
+        </collision>
+        <visual name="south_visual">
+          <pose>0 -5.05 0 0 0 0</pose>
+          <geometry><box><size>2.2 0.1 0.5</size></box></geometry>
+          <material><ambient>0.8 0.1 0.1 1</ambient><diffuse>0.8 0.1 0.1 1</diffuse></material>
+        </visual>
+
+        <!-- East wall (right) -->
+        <collision name="east_collision">
+          <pose>1.05 0 0 0 0 0</pose>
+          <geometry><box><size>0.1 10.2 0.5</size></box></geometry>
+        </collision>
+        <visual name="east_visual">
+          <pose>1.05 0 0 0 0 0</pose>
+          <geometry><box><size>0.1 10.2 0.5</size></box></geometry>
+          <material><ambient>0.8 0.1 0.1 1</ambient><diffuse>0.8 0.1 0.1 1</diffuse></material>
+        </visual>
+
+        <!-- West wall (left) -->
+        <collision name="west_collision">
+          <pose>-1.05 0 0 0 0 0</pose>
+          <geometry><box><size>0.1 10.2 0.5</size></box></geometry>
+        </collision>
+        <visual name="west_visual">
+          <pose>-1.05 0 0 0 0 0</pose>
+          <geometry><box><size>0.1 10.2 0.5</size></box></geometry>
+          <material><ambient>0.8 0.1 0.1 1</ambient><diffuse>0.8 0.1 0.1 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Obstacles: smaller footprint for 2m-wide corridor (same names as rl_train obstacle_entity_names). -->
+    <model name="obs_3_mid_small">
+      <static>true</static>
+      <pose>0.0 1.9 0.12 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>0.5 0.3 0.24</size></box></geometry></collision>
+        <visual name="visual">
+          <geometry><box><size>0.5 0.3 0.24</size></box></geometry>
+          <material><ambient>0.05 0.05 0.05 1</ambient><diffuse>0.05 0.05 0.05 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="obs_4_mid_left">
+      <static>true</static>
+      <pose>-0.48 0.8 0.10 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>0.55 0.28 0.2</size></box></geometry></collision>
+        <visual name="visual">
+          <geometry><box><size>0.55 0.28 0.2</size></box></geometry>
+          <material><ambient>0.05 0.05 0.05 1</ambient><diffuse>0.05 0.05 0.05 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="obs_5_mid_right">
+      <static>true</static>
+      <pose>0.48 0.4 0.12 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>0.45 0.38 0.24</size></box></geometry></collision>
+        <visual name="visual">
+          <geometry><box><size>0.45 0.38 0.24</size></box></geometry>
+          <material><ambient>0.05 0.05 0.05 1</ambient><diffuse>0.05 0.05 0.05 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="obs_6_lower_left_small">
+      <static>true</static>
+      <pose>-0.52 -0.9 0.10 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>0.35 0.35 0.2</size></box></geometry></collision>
+        <visual name="visual">
+          <geometry><box><size>0.35 0.35 0.2</size></box></geometry>
+          <material><ambient>0.05 0.05 0.05 1</ambient><diffuse>0.05 0.05 0.05 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="obs_8_bottom_left">
+      <static>true</static>
+      <pose>-0.62 -3.2 0.12 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>0.62 0.34 0.24</size></box></geometry></collision>
+        <visual name="visual">
+          <geometry><box><size>0.62 0.34 0.24</size></box></geometry>
+          <material><ambient>0.05 0.05 0.05 1</ambient><diffuse>0.05 0.05 0.05 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Finish marker (top-center). Purely visual, no collision. -->
+    <model name="rl_finish_marker">
+      <static>true</static>
+      <pose>0 4.7 0.001 0 0 0</pose>
+      <link name="link">
+        <visual name="visual">
+          <geometry><cylinder><radius>0.12</radius><length>0.002</length></cylinder></geometry>
+          <material><ambient>0.1 0.6 0.9 1</ambient><diffuse>0.1 0.6 0.9 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+  </world>
+</sdf>
+

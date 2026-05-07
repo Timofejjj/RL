@@ -1,0 +1,75 @@
+<?xml version="1.0"?>
+<!--
+  Имя корневого линка = линк шасси в model.sdf и child_frame_id DiffDrive (course_robot_base_link).
+  В RViz RobotModel: TF Prefix оставьте пустым — совпадает с child_frame_id DiffDrive (course_robot_base_link).
+  Кадры вида course_robot/... из Gazebo склеиваются с base_link через static TF в start_everything.bash.
+-->
+<robot name="course_robot" version="1.0">
+  <link name="course_robot_base_link">
+    <visual>
+      <geometry>
+        <mesh filename="meshes/Platforma.STL" scale="1 1 1"/>
+      </geometry>
+    </visual>
+    <visual>
+      <origin xyz="0 0 0.1" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/etaj_2.STL" scale="1 1 1"/>
+      </geometry>
+    </visual>
+    <visual>
+      <geometry>
+        <mesh filename="meshes/Koleso_levoe.STL" scale="1 1 1"/>
+      </geometry>
+    </visual>
+    <visual>
+      <geometry>
+        <mesh filename="meshes/Koleso_pravoe.STL" scale="1 1 1"/>
+      </geometry>
+    </visual>
+    <visual>
+      <geometry>
+        <mesh filename="meshes/Motor_leviy.STL" scale="1 1 1"/>
+      </geometry>
+    </visual>
+    <visual>
+      <geometry>
+        <mesh filename="meshes/Motor_praviy.STL" scale="1 1 1"/>
+      </geometry>
+    </visual>
+    <visual>
+      <geometry>
+        <mesh filename="meshes/Sharik_levo.STL" scale="1 1 1"/>
+      </geometry>
+    </visual>
+    <visual>
+      <geometry>
+        <mesh filename="meshes/Sharik_niz.STL" scale="1 1 1"/>
+      </geometry>
+    </visual>
+    <visual>
+      <geometry>
+        <mesh filename="meshes/Sharik_pravo.STL" scale="1 1 1"/>
+      </geometry>
+    </visual>
+  </link>
+
+  <link name="course_robot/lidar_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <cylinder radius="0.04" length="0.05"/>
+      </geometry>
+      <material name="yellow">
+        <color rgba="1.0 1.0 0.0 1.0"/>
+      </material>
+    </visual>
+  </link>
+
+  <joint name="lidar_joint" type="fixed">
+    <parent link="course_robot_base_link"/>
+    <child link="course_robot/lidar_link"/>
+    <origin xyz="0.13 0 0.17" rpy="0 0 0"/>
+  </joint>
+
+</robot>

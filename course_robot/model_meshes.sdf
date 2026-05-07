@@ -1,0 +1,100 @@
+<?xml version="1.0" ?>
+<!-- Requires STL files in meshes/. Use model.sdf for built-in primitives. -->
+<sdf version="1.9">
+  <model name="course_robot">
+    <pose>0 0 0.15 0 0 0</pose>
+    <static>true</static>
+    <link name="base_link">
+      <inertial>
+        <mass>5.0</mass>
+        <inertia>
+          <ixx>0.2</ixx>
+          <iyy>0.2</iyy>
+          <izz>0.2</izz>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyz>0</iyz>
+        </inertia>
+      </inertial>
+      <visual name="platforma">
+        <pose>0 0 0 0 0 1.57079632679</pose>
+        <geometry>
+          <mesh>
+            <uri>model://course_robot/meshes/Platforma.STL</uri>
+            <scale>1 1 1</scale>
+          </mesh>
+        </geometry>
+      </visual>
+      <visual name="etaj_2">
+        <pose>0 0 0 0 0 1.57079632679</pose>
+        <geometry>
+          <mesh>
+            <uri>model://course_robot/meshes/etaj_2.STL</uri>
+            <scale>1 1 1</scale>
+          </mesh>
+        </geometry>
+      </visual>
+      <visual name="koleso_levoe">
+        <geometry>
+          <mesh>
+            <uri>model://course_robot/meshes/Koleso_levoe.STL</uri>
+            <scale>1 1 1</scale>
+          </mesh>
+        </geometry>
+      </visual>
+      <visual name="koleso_pravoe">
+        <geometry>
+          <mesh>
+            <uri>model://course_robot/meshes/Koleso_pravoe.STL</uri>
+            <scale>1 1 1</scale>
+          </mesh>
+        </geometry>
+      </visual>
+      <visual name="motor_leviy">
+        <pose>0 0 0 0 0 1.57079632679</pose>
+        <geometry>
+          <mesh>
+            <uri>model://course_robot/meshes/Motor_leviy.STL</uri>
+            <scale>1 1 1</scale>
+          </mesh>
+        </geometry>
+      </visual>
+      <visual name="motor_praviy">
+        <pose>0 0 0 0 0 1.57079632679</pose>
+        <geometry>
+          <mesh>
+            <uri>model://course_robot/meshes/Motor_praviy.STL</uri>
+            <scale>1 1 1</scale>
+          </mesh>
+        </geometry>
+      </visual>
+      <visual name="sharik_levo">
+        <pose>0 0 0 0 0 1.57079632679</pose>
+        <geometry>
+          <mesh>
+            <uri>model://course_robot/meshes/Sharik_levo.STL</uri>
+            <scale>1 1 1</scale>
+          </mesh>
+        </geometry>
+      </visual>
+      <visual name="sharik_niz">
+        <pose>0 0 0 0 0 1.57079632679</pose>
+        <geometry>
+          <mesh>
+            <uri>model://course_robot/meshes/Sharik_niz.STL</uri>
+            <scale>1 1 1</scale>
+          </mesh>
+        </geometry>
+      </visual>
+      <visual name="sharik_pravo">
+        <pose>0 0 0 0 0 1.57079632679</pose>
+        <geometry>
+          <mesh>
+            <uri>model://course_robot/meshes/Sharik_pravo.STL</uri>
+            <scale>1 1 1</scale>
+          </mesh>
+        </geometry>
+      </visual>
+    </link>
+  </model>
+</sdf>

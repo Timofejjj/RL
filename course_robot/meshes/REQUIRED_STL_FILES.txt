@@ -1,0 +1,11 @@
+Положите сюда STL (имена как в CAD, регистр важен в Linux):
+
+Platforma.STL
+etaj_2.STL
+Koleso_levoe.STL
+Koleso_pravoe.STL
+Motor_leviy.STL
+Motor_praviy.STL
+Sharik_levo.STL
+Sharik_niz.STL
+Sharik_pravo.STL

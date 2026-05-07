@@ -1,0 +1,39 @@
+# Мост ROS2 ↔ Gazebo Transport для course_robot (имя модели при спавне — course_robot).
+# Запуск: ros2 run ros_gz_bridge parameter_bridge --ros-args -p config_file:=$(pwd)/course_robot/ros_gz_course_robot.yaml
+#
+# Симуляционное время: без моста /clock узлы с use_sim_time не продвигают время — TF из odom и static TF не сходятся в RViz.
+- ros_topic_name: "/clock"
+  gz_topic_name: "/clock"
+  ros_type_name: "rosgraph_msgs/msg/Clock"
+  gz_type_name: "gz.msgs.Clock"
+  direction: GZ_TO_ROS
+
+- ros_topic_name: "/model/course_robot/cmd_vel"
+  gz_topic_name: "/model/course_robot/cmd_vel"
+  ros_type_name: "geometry_msgs/msg/Twist"
+  gz_type_name: "gz.msgs.Twist"
+  direction: ROS_TO_GZ
+
+- ros_topic_name: "/model/course_robot/odometry"
+  gz_topic_name: "/model/course_robot/odometry"
+  ros_type_name: "nav_msgs/msg/Odometry"
+  gz_type_name: "gz.msgs.Odometry"
+  direction: GZ_TO_ROS
+
+# НЕ мостим /tf из Gazebo: Pose_V задаёт позы линков в мире (parent ≈ course_world/world),
+# а в ROS дерево уже собрано через static_transform_publisher + odom_to_tf.py (course_robot_odom → base).
+# Два источника для цепочки до course_robot/... дают «два родителя» / гонки и мерцание Transform в RViz.
+
+# 3D lidar (gpu_lidar): scoped-топики gz-sim 8 / Jazzy (имя мира и модели — как в course_robot_world.sdf).
+# При смене world name / model name / link / sensor — поправьте пути или оставьте <topic> пустым и проверьте: gz topic -l | grep lidar
+- ros_topic_name: "/lidar/points"
+  gz_topic_name: "/world/course_world/model/course_robot/link/lidar_link/sensor/lidar_3d/scan/points"
+  ros_type_name: "sensor_msgs/msg/PointCloud2"
+  gz_type_name: "gz.msgs.PointCloudPacked"
+  direction: GZ_TO_ROS
+
+- ros_topic_name: "/lidar/scan"
+  gz_topic_name: "/world/course_world/model/course_robot/link/lidar_link/sensor/lidar_3d/scan"
+  ros_type_name: "sensor_msgs/msg/LaserScan"
+  gz_type_name: "gz.msgs.LaserScan"
+  direction: GZ_TO_ROS

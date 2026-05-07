@@ -1,0 +1,8 @@
+*.bash text eol=lf
+*.sh text eol=lf
+*.py text eol=lf
+*.rviz text eol=lf
+*.urdf text eol=lf
+*.sdf text eol=lf
+*.xml text eol=lf
+*.config text eol=lf

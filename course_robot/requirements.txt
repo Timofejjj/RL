@@ -1,0 +1,6 @@
+# Сторонние (не-ROS) зависимости для обучения RL
+# ROS 2 пакеты (rclpy, geometry_msgs, ros_gz_interfaces и т.д.) ставятся через apt/rosdep и setup.bash
+numpy==1.26.4
+gymnasium==0.29.1
+stable-baselines3==2.3.2
+tensorboard==2.16.2

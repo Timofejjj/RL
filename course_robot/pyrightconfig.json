@@ -1,0 +1,22 @@
+{
+  "pythonVersion": "3.10",
+  "pythonPlatform": "Windows",
+  "exclude": [
+    ".venv",
+    ".venv/**",
+    ".venv_wsl",
+    ".venv_wsl/**",
+    "**/site-packages/**",
+    "**/Lib/site-packages/**",
+    "**/lib/python*/site-packages/**"
+  ],
+  "ignore": [
+    ".venv",
+    ".venv/**",
+    ".venv_wsl",
+    ".venv_wsl/**",
+    "**/site-packages/**",
+    "**/Lib/site-packages/**",
+    "**/lib/python*/site-packages/**"
+  ]
+}

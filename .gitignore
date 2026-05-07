@@ -1,0 +1,57 @@
+.venv/
+**/.venv/
+.venv_wsl/
+**/.venv_wsl/
+venv/
+**/venv/
+ENV/
+env/
+
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.pyd
+
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.tox/
+.coverage
+coverage.xml
+.hypothesis/
+
+.idea/
+.vs/
+*.code-workspace
+
+# Local editor state
+.vscode/
+
+# OS junk
+Thumbs.db
+Desktop.ini
+
+# Common artifacts
+*.log
+*.tmp
+*.bak
+
+# Training artifacts / large outputs (keep code, ignore results)
+training_logs/
+**/training_logs/
+runs/
+**/runs/
+wandb/
+**/wandb/
+checkpoints/
+**/checkpoints/
+models/
+**/models/
+*.pt
+*.pth
+*.onnx
+*.tfevents*
+
+# Videos can be huge; track only if you really need them
+Videos/
+**/Videos/

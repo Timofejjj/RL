@@ -1,0 +1,1 @@
+<?xml version="1.0" ?><sdf version="1.9"><world name="test"><model name="test_model"><static>false</static><link name="link"><kinematic>true</kinematic><gravity>false</gravity><collision name="col"><geometry><box><size>1 1 1</size></box></geometry></collision></link></model></world></sdf>

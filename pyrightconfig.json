@@ -1,0 +1,23 @@
+{
+  "pythonVersion": "3.10",
+  "pythonPlatform": "Windows",
+  "extraPaths": [
+    "D:/BSU/ros2_humble/ros2-windows/Lib/site-packages"
+  ],
+  "exclude": [
+    "**/.venv/**",
+    "**/.venv_wsl/**",
+    "**/site-packages/**",
+    "**/Lib/site-packages/**",
+    "**/lib/python*/site-packages/**",
+    "course_robot/.venv/**"
+  ],
+  "ignore": [
+    "**/.venv/**",
+    "**/.venv_wsl/**",
+    "**/site-packages/**",
+    "**/Lib/site-packages/**",
+    "**/lib/python*/site-packages/**",
+    "course_robot/.venv/**"
+  ]
+}
