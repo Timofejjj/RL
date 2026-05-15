@@ -314,7 +314,6 @@ course_robot_launch_ros_tf_stack
 
 COURSE_RUN_RL="${COURSE_RUN_RL:-0}"
 if [[ "$COURSE_RUN_RL" -eq 1 ]]; then
-  RL_BACKEND="${COURSE_RL_BACKEND:-ros}"
   RL_TIMESTEPS="${COURSE_RL_TIMESTEPS:-100000}"
   RL_MODEL_NAME="${COURSE_RL_MODEL_NAME:-ppo_course_robot_100k}"
   RL_MAX_LINEAR_SPEED_MPS="${COURSE_RL_MAX_LINEAR_SPEED_MPS:-0.35}"
@@ -350,7 +349,7 @@ if [[ "$COURSE_RUN_RL" -eq 1 ]]; then
   fi
 
   echo "== RL training: course_robot/rl_train.py (COURSE_RUN_RL=1) =="
-  echo "backend=$RL_BACKEND timesteps=$RL_TIMESTEPS model=$RL_MODEL_NAME"
+  echo "timesteps=$RL_TIMESTEPS model=$RL_MODEL_NAME"
   echo "save_root=$RL_SAVE_ROOT"
   echo "log_root=$RL_LOG_ROOT"
   if [[ -n "$RL_RUN_ID" ]]; then
@@ -358,7 +357,6 @@ if [[ "$COURSE_RUN_RL" -eq 1 ]]; then
   fi
   rl_cmd=(
     "$COURSE_PYTHON" "$CR_DIR/rl_train.py"
-    --backend "$RL_BACKEND"
     --total-timesteps "$RL_TIMESTEPS"
     --model-name "$RL_MODEL_NAME"
     --save-dir "$RL_SAVE_ROOT"

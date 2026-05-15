@@ -2,6 +2,12 @@
 # Запуск: ros2 run ros_gz_bridge parameter_bridge --ros-args -p config_file:=$(pwd)/course_robot/ros_gz_course_robot.yaml
 #
 # Симуляционное время: без моста /clock узлы с use_sim_time не продвигают время — TF из odom и static TF не сходятся в RViz.
+#
+# Сервис pause/reset мира для rl_train.py (ros_gz_interfaces/srv/ControlWorld ↔ gz.msgs.WorldControl).
+- service_name: "/world/course_world/control"
+  ros_type_name: "ros_gz_interfaces/srv/ControlWorld"
+  gz_req_type_name: "gz.msgs.WorldControl"
+  gz_rep_type_name: "gz.msgs.Boolean"
 - ros_topic_name: "/clock"
   gz_topic_name: "/clock"
   ros_type_name: "rosgraph_msgs/msg/Clock"

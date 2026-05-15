@@ -23,6 +23,7 @@ class LidarDrive(Node):
         self.declare_parameter("avoid_linear_speed_mps", 0.08)
         self.declare_parameter("turn_speed_radps", 0.8)
         self.declare_parameter("front_half_angle_deg", 35.0)
+        self.declare_parameter("min_clearance_any_direction_m", 0.22)
         self.declare_parameter("publish_hz", 10.0)
 
         self._points_topic = (
@@ -49,6 +50,11 @@ class LidarDrive(Node):
         )
         self._front_half_angle_rad = math.radians(
             self.get_parameter("front_half_angle_deg")
+            .get_parameter_value()
+            .double_value
+        )
+        self._min_clearance_any_m = (
+            self.get_parameter("min_clearance_any_direction_m")
             .get_parameter_value()
             .double_value
         )
@@ -94,28 +100,38 @@ class LidarDrive(Node):
                 continue
 
             d = math.hypot(x, y)
+            if d < 1e-4:
+                continue
             if d < min_dist:
                 min_dist = d
 
-            # React only to points in front hemisphere for navigation decisions.
-            if x <= 0.0:
-                continue
-
-            if y >= 0.0:
+            # Left / right bins in robot frame (x forward, y left): use full horizontal plane,
+            # including sides and rear, so turns react to obstacles abeam and astern.
+            if y > 0.0:
                 if d < left_min:
                     left_min = d
+            elif y < 0.0:
+                if d < right_min:
+                    right_min = d
             else:
+                if d < left_min:
+                    left_min = d
                 if d < right_min:
                     right_min = d
 
-            if abs(math.atan2(y, x)) <= self._front_half_angle_rad and d < front_min:
+            angle = math.atan2(y, x)
+            if abs(angle) <= self._front_half_angle_rad and d < front_min:
                 front_min = d
 
         self._last_min_dist = min_dist
         self._front_min_dist = front_min
         self._left_min_dist = left_min
         self._right_min_dist = right_min
-        self._is_clear = front_min > self._clear_distance_m
+        any_too_close = min_dist < self._min_clearance_any_m
+        self._is_clear = (
+            front_min > self._clear_distance_m
+            and not any_too_close
+        )
 
         if not self._is_clear:
             if left_min > right_min:
@@ -149,4 +165,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

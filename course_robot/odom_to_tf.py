@@ -8,8 +8,11 @@ to the fixed frame (world). We use:
   child:  course_robot_base_link
 and take pose from /model/course_robot/odometry.
 
-Do not bridge gz /model/.../tf into ROS /tf while publishing this transform: tf2 allows only one
-parent per frame; duplicate trees cause intermittent RViz transform errors.
+Only one publisher should define this transform. If ros_gz_bridge (or a Gazebo odometry plugin)
+already publishes course_robot_odom -> course_robot_base_link on /tf, set parameter publish_tf:=false
+on this node and rely on the bridge — otherwise RViz will flicker between two sources.
+
+When publish_tf is false, this node does not subscribe or broadcast (no duplicate TF).
 """
 
 import math
@@ -48,6 +51,7 @@ class OdomToTf(Node):
             ("reset_pose_topic", "/course_robot/reset_pose"),
             ("parent_frame", "course_robot_odom"),
             ("child_frame", "course_robot_base_link"),
+            ("publish_tf", True),
             ("use_sim_time", True),
         )
         for name, value in defaults:
@@ -58,15 +62,24 @@ class OdomToTf(Node):
         self._child = str(self.get_parameter("child_frame").value)
         odom_topic = str(self.get_parameter("odom_topic").value)
         reset_pose_topic = str(self.get_parameter("reset_pose_topic").value)
+        self._publish_tf = bool(self.get_parameter("publish_tf").value)
         self._reset_target: tuple[float, float, float, float] | None = None
         self._odom_reference: tuple[float, float, float] | None = None
 
-        self._br = TransformBroadcaster(self)
-        self._sub = self.create_subscription(Odometry, odom_topic, self._on_odom, 10)
-        self._reset_sub = self.create_subscription(PoseStamped, reset_pose_topic, self._on_reset_pose, 10)
-        self.get_logger().info(
-            f"Publishing TF {self._parent} -> {self._child} from {odom_topic}; reset topic={reset_pose_topic}"
-        )
+        self._br: TransformBroadcaster | None = None
+        if self._publish_tf:
+            self._br = TransformBroadcaster(self)
+            self.create_subscription(Odometry, odom_topic, self._on_odom, 10)
+            self.create_subscription(PoseStamped, reset_pose_topic, self._on_reset_pose, 10)
+            self.get_logger().info(
+                f"Publishing TF {self._parent} -> {self._child} from {odom_topic}; "
+                f"reset topic={reset_pose_topic}"
+            )
+        else:
+            self.get_logger().warn(
+                "publish_tf=false: not broadcasting TF (use when ros_gz_bridge or another node "
+                "already publishes this transform; avoids duplicate TF flicker in RViz)."
+            )
 
     def _on_reset_pose(self, msg: PoseStamped) -> None:
         q = msg.pose.orientation
@@ -82,6 +95,8 @@ class OdomToTf(Node):
         )
 
     def _on_odom(self, msg: Odometry) -> None:
+        if self._br is None:
+            return
         p = msg.pose.pose.position
         q = msg.pose.pose.orientation
         odom_yaw = quat_to_yaw(q.x, q.y, q.z, q.w)

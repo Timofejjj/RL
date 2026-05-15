@@ -5,7 +5,6 @@
 # Optional env overrides:
 #   COURSE_RL_TIMESTEPS=200000
 #   COURSE_RL_MODEL_NAME=ppo_course_robot_200k
-#   COURSE_RL_BACKEND=ros
 #   COURSE_RL_RUN_ID=run_custom_name
 
 set -eo pipefail
@@ -36,7 +35,6 @@ else
   PYTHON_BIN="$(command -v python3)"
 fi
 
-COURSE_RL_BACKEND="${COURSE_RL_BACKEND:-ros}"
 COURSE_RL_TIMESTEPS="${COURSE_RL_TIMESTEPS:-100000}"
 COURSE_RL_MODEL_NAME="${COURSE_RL_MODEL_NAME:-ppo_course_robot_100k}"
 COURSE_RL_MAX_LINEAR_SPEED_MPS="${COURSE_RL_MAX_LINEAR_SPEED_MPS:-0.35}"
@@ -74,7 +72,6 @@ fi
 cd "$ROOT"
 echo "Project root: $ROOT"
 echo "Python: $PYTHON_BIN"
-echo "Backend: $COURSE_RL_BACKEND"
 echo "Timesteps: $COURSE_RL_TIMESTEPS"
 echo "Model name: $COURSE_RL_MODEL_NAME"
 echo "Save root: $COURSE_RL_SAVE_DIR"
@@ -93,7 +90,6 @@ echo "Obstacle randomize every: $COURSE_RL_OBSTACLE_RANDOMIZE_EVERY"
 
 cmd=(
   "$PYTHON_BIN" "$RL_SCRIPT"
-  --backend "$COURSE_RL_BACKEND"
   --total-timesteps "$COURSE_RL_TIMESTEPS"
   --model-name "$COURSE_RL_MODEL_NAME"
   --save-dir "$COURSE_RL_SAVE_DIR"

@@ -3,51 +3,60 @@
   Имя корневого линка = линк шасси в model.sdf и child_frame_id DiffDrive (course_robot_base_link).
   В RViz RobotModel: TF Prefix оставьте пустым — совпадает с child_frame_id DiffDrive (course_robot_base_link).
   Кадры вида course_robot/... из Gazebo склеиваются с base_link через static TF в start_everything.bash.
+  Визуалы: rpy Z = 1.5708 как в model.sdf (меши CAD в мировой оси; без этого RViz «вбок» на 90° к Gazebo).
 -->
 <robot name="course_robot" version="1.0">
   <link name="course_robot_base_link">
     <visual>
+      <origin xyz="0 0 0" rpy="0 0 1.5708"/>
       <geometry>
         <mesh filename="meshes/Platforma.STL" scale="1 1 1"/>
       </geometry>
     </visual>
     <visual>
-      <origin xyz="0 0 0.1" rpy="0 0 0"/>
+      <origin xyz="0 0 0.1" rpy="0 0 1.5708"/>
       <geometry>
         <mesh filename="meshes/etaj_2.STL" scale="1 1 1"/>
       </geometry>
     </visual>
     <visual>
+      <origin xyz="0 0 0" rpy="0 0 1.5708"/>
       <geometry>
         <mesh filename="meshes/Koleso_levoe.STL" scale="1 1 1"/>
       </geometry>
     </visual>
     <visual>
+      <origin xyz="0 0 0" rpy="0 0 1.5708"/>
       <geometry>
         <mesh filename="meshes/Koleso_pravoe.STL" scale="1 1 1"/>
       </geometry>
     </visual>
     <visual>
+      <origin xyz="0 0 0" rpy="0 0 1.5708"/>
       <geometry>
         <mesh filename="meshes/Motor_leviy.STL" scale="1 1 1"/>
       </geometry>
     </visual>
     <visual>
+      <origin xyz="0 0 0" rpy="0 0 1.5708"/>
       <geometry>
         <mesh filename="meshes/Motor_praviy.STL" scale="1 1 1"/>
       </geometry>
     </visual>
     <visual>
+      <origin xyz="0 0 0" rpy="0 0 1.5708"/>
       <geometry>
         <mesh filename="meshes/Sharik_levo.STL" scale="1 1 1"/>
       </geometry>
     </visual>
     <visual>
+      <origin xyz="0 0 0" rpy="0 0 1.5708"/>
       <geometry>
         <mesh filename="meshes/Sharik_niz.STL" scale="1 1 1"/>
       </geometry>
     </visual>
     <visual>
+      <origin xyz="0 0 0" rpy="0 0 1.5708"/>
       <geometry>
         <mesh filename="meshes/Sharik_pravo.STL" scale="1 1 1"/>
       </geometry>
@@ -69,7 +78,8 @@
   <joint name="lidar_joint" type="fixed">
     <parent link="course_robot_base_link"/>
     <child link="course_robot/lidar_link"/>
-    <origin xyz="0.13 0 0.17" rpy="0 0 0"/>
+    <!-- Как lidar_link pose в model.sdf (relative_to course_robot_base_link) -->
+    <origin xyz="-0.05 0 0.15" rpy="0 0 0"/>
   </joint>
 
 </robot>
