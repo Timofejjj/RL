@@ -54,7 +54,9 @@ import rclpy
 import tf2_ros
 from geometry_msgs.msg import PoseStamped, Twist
 from nav_msgs.msg import Odometry
+from rclpy.duration import Duration
 from rclpy.exceptions import InvalidHandle, ROSInterruptException, TimerCancelledError
+from rclpy.parameter import Parameter
 from rclpy.qos import HistoryPolicy, QoSProfile, ReliabilityPolicy
 from rclpy.time import Time
 from sensor_msgs.msg import PointCloud2
@@ -198,7 +200,7 @@ INFO_SCHEMA_DEFAULTS: dict[str, Any] = {
 DEFAULT_LIDAR_POINT_MIN_XY_M: float = 0.05
 
 # Curriculum: no obstacles until success rate reaches threshold, then enable obstacles.
-CURRICULUM_SUCCESS_THRESHOLD: float = 0.55
+CURRICULUM_SUCCESS_THRESHOLD: float = 0.05
 CURRICULUM_OBSTACLE_COUNT_HARD: int = 4
 
 # Playable interior in course_robot_world.sdf (inside rl_arena_walls): 2 m × 10 m.
@@ -206,6 +208,12 @@ DEFAULT_ARENA_WIDTH_M: float = 2.0
 DEFAULT_ARENA_LENGTH_M: float = 10.0
 # Keep randomized spawn/goal away from inner wall faces (finish cylinder radius ≈ 0.12 m in SDF).
 ARENA_BOUNDARY_INSET_M: float = 0.15
+# rl_finish_marker cylinder radius in course_robot_world.sdf (visual reach extension).
+GOAL_MARKER_RADIUS_M: float = 0.12
+# Chassis half-extent in plan (model.sdf box ~0.38 m); center can be outside disk while body overlaps.
+ROBOT_GOAL_FOOTPRINT_RADIUS_M: float = 0.22
+# TF frame for goal distance (Gazebo set_pose / target_x,y are in world).
+TF_WORLD_FRAME: str = "world"
 
 
 def _arena_sampling_bounds(
@@ -408,6 +416,10 @@ class RobotEnv(gym.Env[np.ndarray, np.ndarray]):
         super().__init__()
         self.node: Any = rclpy.create_node("course_robot_ppo_env")
         self._logger = self.node.get_logger()
+        if not self.node.has_parameter("use_sim_time"):
+            self.node.declare_parameter("use_sim_time", True)
+        elif not bool(self.node.get_parameter("use_sim_time").value):
+            self.node.set_parameters([Parameter("use_sim_time", Parameter.Type.BOOL, True)])
 
         self.points_topic = points_topic
         self.odom_topic = odom_topic
@@ -521,6 +533,8 @@ class RobotEnv(gym.Env[np.ndarray, np.ndarray]):
         self._curriculum_episodes_total: int = 0
         self._curriculum_success_rate: float = 0.0
         self._last_layout_obstacle_k_applied: int | None = None
+        self._world_anchor_xy = (float(spawn_x), float(spawn_y))
+        self._odom_anchor_xy = (0.0, 0.0)
 
         # Наблюдение: N лучей + (расстояние, угол) + (линейная скорость, угловая скорость).
         obs_dim = self.num_lidar_beams + 4
@@ -630,53 +644,146 @@ class RobotEnv(gym.Env[np.ndarray, np.ndarray]):
         return rays
 
     # ---------- State helpers ----------
-    def _current_pose(self) -> tuple[float, float, float]:
-        """Возвращает (x, y, yaw) робота в мировой плоскости: сначала TF, иначе одометрия/спавн."""
+    def _tf_lookup_timeout(self) -> Duration:
+        return Duration(nanoseconds=100_000_000)
+
+    def _tf_stamp(self) -> Time:
+        now = self.node.get_clock().now()
+        if now.nanoseconds > 0:
+            return now
+        return Time()
+
+    def _pose_from_transform(self, t: Any) -> tuple[float, float, float]:
+        x = t.transform.translation.x
+        y = t.transform.translation.y
+        q = t.transform.rotation
+        yaw = quat_to_yaw(q.x, q.y, q.z, q.w)
+        return float(x), float(y), float(yaw)
+
+    def _compose_poses_2d(
+        self,
+        t_parent_to_child: Any,
+        child_x: float,
+        child_y: float,
+        child_yaw: float,
+    ) -> tuple[float, float, float]:
+        """Поза child в parent, заданная t: parent→child; вернуть (x,y,yaw) child в parent."""
+        px = float(t_parent_to_child.transform.translation.x)
+        py = float(t_parent_to_child.transform.translation.y)
+        q = t_parent_to_child.transform.rotation
+        parent_yaw = quat_to_yaw(q.x, q.y, q.z, q.w)
+        cos_p = math.cos(parent_yaw)
+        sin_p = math.sin(parent_yaw)
+        wx = px + cos_p * child_x - sin_p * child_y
+        wy = py + sin_p * child_x + cos_p * child_y
+        return wx, wy, wrap_to_pi(parent_yaw + child_yaw)
+
+    def _refresh_odom_world_anchor(self) -> None:
+        """После телепорта на спавн: привязка сырой одометрии к world (fallback без TF)."""
+        self._world_anchor_xy = (float(self.spawn_x), float(self.spawn_y))
+        if self.odom_msg is not None:
+            p = cast(Any, self.odom_msg).pose.pose.position
+            self._odom_anchor_xy = (float(p.x), float(p.y))
+        else:
+            self._odom_anchor_xy = (0.0, 0.0)
+
+    def _robot_xy_yaw_world_from_odom_anchor(self) -> tuple[float, float, float]:
+        if self.odom_msg is None:
+            return self.spawn_x, self.spawn_y, self.spawn_yaw_rad
+        odom = cast(Any, self.odom_msg)
+        p = odom.pose.pose.position
+        q = odom.pose.pose.orientation
+        ox, oy = float(p.x), float(p.y)
+        yaw = quat_to_yaw(q.x, q.y, q.z, q.w)
+        wx = self._world_anchor_xy[0] + (ox - self._odom_anchor_xy[0])
+        wy = self._world_anchor_xy[1] + (oy - self._odom_anchor_xy[1])
+        return wx, wy, yaw
+
+    def _robot_xy_yaw_world(self) -> tuple[float, float, float]:
+        """
+        Поза робота в world. Приоритет: spawn+Δodom (как odom_to_tf после reset_pose),
+        иначе TF — иначе при смещении world→odom дистанция до цели считается неверно.
+        """
+        if self.odom_msg is not None:
+            return self._robot_xy_yaw_world_from_odom_anchor()
+
+        stamp = self._tf_stamp()
+        timeout = self._tf_lookup_timeout()
         try:
-            # Цепочка course_robot_odom → course_robot_base_link (как в типовом URDF пакета).
-            # Latest transform (t=0): avoids LookupException for «current» time before TF arrives.
-            t = self.tf_buffer.lookup_transform(
+            t_wb = self.tf_buffer.lookup_transform(
+                TF_WORLD_FRAME,
+                "course_robot_base_link",
+                stamp,
+                timeout=timeout,
+            )
+            return self._pose_from_transform(t_wb)
+        except TransformException:
+            pass
+
+        try:
+            t_ob = self.tf_buffer.lookup_transform(
                 "course_robot_odom",
                 "course_robot_base_link",
-                Time(nanoseconds=0),
+                stamp,
+                timeout=timeout,
             )
-            x = t.transform.translation.x
-            y = t.transform.translation.y
-            q = t.transform.rotation
-            yaw = quat_to_yaw(q.x, q.y, q.z, q.w)
-            return float(x), float(y), float(yaw)
+            return self._pose_from_transform(t_ob)
         except TransformException:
-            # Fallback to raw odometry if TF is unavailable
-            if self.odom_msg is None:
-                return self.spawn_x, self.spawn_y, self.spawn_yaw_rad
+            pass
 
-            odom = cast(Any, self.odom_msg)
-            p = odom.pose.pose.position
-            q = odom.pose.pose.orientation
-            yaw = quat_to_yaw(q.x, q.y, q.z, q.w)
-            return float(p.x), float(p.y), float(yaw)
+        return self.spawn_x, self.spawn_y, self.spawn_yaw_rad
+
+    def _goal_xy_world(self) -> tuple[float, float]:
+        if self._goal_xy_cache is not None:
+            return float(self._goal_xy_cache[0]), float(self._goal_xy_cache[1])
+        return float(self.target_x), float(self.target_y)
+
+    def _planar_distance_to_goal_m(self, robot_x: float, robot_y: float) -> float:
+        gx, gy = self._goal_xy_world()
+        return math.hypot(gx - robot_x, gy - robot_y)
+
+    def _goal_vector_in_base_frame(self) -> tuple[float, float]:
+        """Вектор до цели в base_link (world-поза робота → поворот на −yaw), без tf2_geometry_msgs."""
+        rx, ry, ryaw = self._robot_xy_yaw_world()
+        gx_w, gy_w = self._goal_xy_world()
+        dx = float(gx_w - rx)
+        dy = float(gy_w - ry)
+        cos_y = math.cos(ryaw)
+        sin_y = math.sin(ryaw)
+        gx = cos_y * dx + sin_y * dy
+        gy = -sin_y * dx + cos_y * dy
+        return float(gx), float(gy)
+
+    def _goal_reach_threshold_m(self) -> float:
+        """Центр base_link + маркер + габарит корпуса (визуально «у цели» в Gazebo)."""
+        return (
+            self.goal_threshold_m
+            + GOAL_MARKER_RADIUS_M
+            + ROBOT_GOAL_FOOTPRINT_RADIUS_M
+        )
 
     def _goal_features_from_pose(self, robot_x: float, robot_y: float, robot_yaw: float) -> tuple[float, float]:
         """Евклидово расстояние до цели и относительный угол цели в системе робота ([-π, π])."""
-        dx = float(self.target_x - robot_x)
-        dy = float(self.target_y - robot_y)
-        distance = math.hypot(dx, dy)
+        distance = self._planar_distance_to_goal_m(robot_x, robot_y)
+        gx_w, gy_w = self._goal_xy_world()
+        dx = float(gx_w - robot_x)
+        dy = float(gy_w - robot_y)
         target_heading = math.atan2(dy, dx)
         angle_to_goal = wrap_to_pi(target_heading - robot_yaw)
         return distance, angle_to_goal
 
     def _goal_features(self) -> tuple[float, float]:
         """Один вызов TF/одометрии + признаки цели (для отладки; в step используйте кэш)."""
-        robot_x, robot_y, robot_yaw = self._current_pose()
-        return self._goal_features_from_pose(robot_x, robot_y, robot_yaw)
+        gx, gy = self._goal_vector_in_base_frame()
+        return math.hypot(gx, gy), wrap_to_pi(math.atan2(gy, gx))
 
     def _sync_goal_feature_cache(self) -> None:
         """Один вызов позы за такт управления; обновляет кэш дистанции/угла до цели."""
         try:
-            robot_x, robot_y, robot_yaw = self._current_pose()
-            self._cached_distance_to_goal, self._cached_angle_to_goal = self._goal_features_from_pose(
-                robot_x, robot_y, robot_yaw
-            )
+            rx, ry, ryaw = self._robot_xy_yaw_world()
+            self._cached_distance_to_goal = self._planar_distance_to_goal_m(rx, ry)
+            gx, gy = self._goal_vector_in_base_frame()
+            self._cached_angle_to_goal = wrap_to_pi(math.atan2(gy, gx))
         except (TypeError, AttributeError, ValueError) as exc:
             self._logger.warning(f"sync_goal_feature_cache failed: {exc}")
             self._cached_distance_to_goal = 0.0
@@ -1430,24 +1537,29 @@ class RobotEnv(gym.Env[np.ndarray, np.ndarray]):
             self._obstacle_xy_cache = []
 
         # Быстрый путь: тот же лабиринт, только робот на спавне — меньше пауз и сервисов Gazebo.
+        # Для goal_reached — та же логика мгновенного respawn без смены цели/препятствий, но без
+        # счётчика «5 подряд → полная рандомизация» (он только для collision/stuck).
         fast_collision_reset = (
-            self._last_terminal_event in {"collision", "stuck"}
+            self._last_terminal_event in {"collision", "stuck", "goal_reached"}
             and layout_cache_ready
             and not randomize_obstacles
         )
 
         if fast_collision_reset:
-            self._fast_collision_count += 1
-            if self._fast_collision_count >= 5:
-                fast_collision_reset = False
-                randomize_obstacles = True
-                
-                # Force cache drop to ensure actual randomization happens
-                self._goal_xy_cache = None
-                self._obstacle_xy_cache = []
-                
+            if self._last_terminal_event in {"collision", "stuck"}:
+                self._fast_collision_count += 1
+                if self._fast_collision_count >= 5:
+                    fast_collision_reset = False
+                    randomize_obstacles = True
+
+                    # Force cache drop to ensure actual randomization happens
+                    self._goal_xy_cache = None
+                    self._obstacle_xy_cache = []
+
+                    self._fast_collision_count = 0
+                    self._logger.info("Fast collision count reached 5, forcing full layout randomization.")
+            elif self._last_terminal_event == "goal_reached":
                 self._fast_collision_count = 0
-                self._logger.info("Fast collision count reached 5, forcing full layout randomization.")
         else:
             self._fast_collision_count = 0
 
@@ -1503,21 +1615,28 @@ class RobotEnv(gym.Env[np.ndarray, np.ndarray]):
         self._fresh_lidar = False
         unpause_ok = self._set_world_paused(False)
         if not unpause_ok:
-            self._logger.warn("Could not unpause world after reset; sensor updates may stall.")
+            time.sleep(0.05)
+            unpause_ok = self._set_world_paused(False)
+        if not unpause_ok:
+            self._logger.warn(
+                "Could not unpause world after reset; press Play in Gazebo or check "
+                f"/world/{self.world_name}/control bridge."
+            )
         if pose_ok:
             self._wait_for_odom(timeout_sec=0.35 if fast_collision_reset else 0.8)
         self._publish_reset_pose()
         self._stop_robot(repeats=2 if fast_collision_reset else 4)
 
-        # Synchronize and wait for fresh sensor data.
+        # Synchronize and wait for fresh sensor data (wall-clock bound: sim /clock may lag).
         sensor_timeout_sec = 0.8 if fast_collision_reset else 2.0
-        sensor_deadline_ns = self._ros_deadline_ns_after(sensor_timeout_sec)
-        while rclpy.ok() and self.node.get_clock().now().nanoseconds < sensor_deadline_ns:
+        sensor_wall_deadline = time.monotonic() + sensor_timeout_sec
+        while rclpy.ok() and time.monotonic() < sensor_wall_deadline:
             if not self._safe_spin_once(timeout_sec=0.1):
                 break
             if self.odom_msg is not None and self._fresh_lidar:
                 break
 
+        self._refresh_odom_world_anchor()
         self._episode_index += 1
         self._last_terminal_event = "reset"
         self._sync_goal_feature_cache()
@@ -1600,29 +1719,37 @@ class RobotEnv(gym.Env[np.ndarray, np.ndarray]):
             step_begin_ros_ns = int(self.node.get_clock().now().nanoseconds)
             step_deadline_ns = self._ros_deadline_ns_after(self.control_dt_sec)
             virtual_collision_triggered = False
+            step_min_distance_to_goal = float("inf")
             spin_timeout_sec = min(0.005, max(self.control_dt_sec * 0.25, 0.001))
             wall_loop_started = time.monotonic()
+            wall_step_deadline = wall_loop_started + float(self.control_dt_sec)
             wall_hard_deadline = wall_loop_started + max(30.0, float(self.control_dt_sec) * 200.0)
             stall_last_ros_ns = step_begin_ros_ns
             stall_wall_started = wall_loop_started
-            sim_clock_stall_wall_sec = 0.25
+            sim_clock_stall_wall_sec = 1.0
+            use_wall_clock_step = False
+            sim_clock_stall_warned = False
 
             while rclpy.ok():
                 now_ros_ns = int(self.node.get_clock().now().nanoseconds)
-                if now_ros_ns >= step_deadline_ns:
+                if not use_wall_clock_step and now_ros_ns >= step_deadline_ns:
                     break
                 if now_ros_ns != stall_last_ros_ns:
                     stall_last_ros_ns = now_ros_ns
                     stall_wall_started = time.monotonic()
-                elif time.monotonic() - stall_wall_started >= sim_clock_stall_wall_sec:
-                    self._logger.warning("step: sim / ROS clock stalled (deadline not advancing)")
-                    self._sync_goal_feature_cache()
-                    info = self._build_info(
-                        event="sensor_failure",
-                        terminated_reason="sensor_failure",
-                        extra={"forward_speed_mps": 0.0, "detail": "sim_clock_stall"},
-                    )
-                    return self._safe_observation(), 0.0, True, False, info
+                elif (
+                    not use_wall_clock_step
+                    and time.monotonic() - stall_wall_started >= sim_clock_stall_wall_sec
+                ):
+                    use_wall_clock_step = True
+                    if not sim_clock_stall_warned:
+                        sim_clock_stall_warned = True
+                        self._logger.warning(
+                            "step: /clock (sim time) not advancing — using wall-clock step timing. "
+                            "Press Play in Gazebo and ensure ros_gz_bridge publishes /clock."
+                        )
+                if use_wall_clock_step and time.monotonic() >= wall_step_deadline:
+                    break
                 if time.monotonic() >= wall_hard_deadline:
                     self._logger.warning("step: wall-clock watchdog exceeded waiting for sim step")
                     self._sync_goal_feature_cache()
@@ -1643,6 +1770,11 @@ class RobotEnv(gym.Env[np.ndarray, np.ndarray]):
                     )
                     return self._safe_observation(), 0.0, True, False, info
 
+                self._sync_goal_feature_cache()
+                step_min_distance_to_goal = min(
+                    step_min_distance_to_goal, float(self._cached_distance_to_goal)
+                )
+
                 # Виртуальный бампер: порог по минимальной дистанции лидара — немедленный нулевой cmd_vel.
                 if self._safe_min_lidar() <= self.collision_distance_m:
                     virtual_collision_triggered = True
@@ -1650,10 +1782,16 @@ class RobotEnv(gym.Env[np.ndarray, np.ndarray]):
                     break
 
             step_end_ros_ns = int(self.node.get_clock().now().nanoseconds)
-            elapsed_sim_sec = max((step_end_ros_ns - step_begin_ros_ns) / 1e9, 1e-6)
+            if use_wall_clock_step:
+                elapsed_sim_sec = float(self.control_dt_sec)
+            else:
+                elapsed_sim_sec = max((step_end_ros_ns - step_begin_ros_ns) / 1e9, 1e-6)
 
             self._sync_goal_feature_cache()
-            distance_to_goal = float(self._cached_distance_to_goal)
+            distance_to_goal = min(
+                float(self._cached_distance_to_goal),
+                step_min_distance_to_goal,
+            )
             angle_to_goal = float(self._cached_angle_to_goal)
             min_lidar = self._safe_min_lidar()
             sensor_snapshot_min_lidar = float(min_lidar)
@@ -1699,7 +1837,22 @@ class RobotEnv(gym.Env[np.ndarray, np.ndarray]):
             terminated_reason = "none"
             truncated_reason = "none"
 
-            if virtual_collision_triggered or min_lidar <= self.collision_distance_m:
+            goal_reach_m = self._goal_reach_threshold_m()
+            goal_reached_now = distance_to_goal <= goal_reach_m
+
+            if goal_reached_now:
+                reward += self.reward_goal_bonus
+                terminated = True
+                event = "goal_reached"
+                success = True
+                terminated_reason = "goal_reached"
+                rx_ok, ry_ok, _ = self._robot_xy_yaw_world()
+                self._logger.info(
+                    f"Цель достигнута: distance={distance_to_goal:.3f} m "
+                    f"(порог {goal_reach_m:.3f}), goal={self._goal_xy_world()}, "
+                    f"robot_world=({rx_ok:.3f}, {ry_ok:.3f})"
+                )
+            elif virtual_collision_triggered or min_lidar <= self.collision_distance_m:
                 reward -= self.reward_collision_penalty
                 terminated = True
                 event = "collision"
@@ -1716,12 +1869,6 @@ class RobotEnv(gym.Env[np.ndarray, np.ndarray]):
                 event = "stuck"
                 stuck = True
                 terminated_reason = "stuck"
-            elif distance_to_goal < self.goal_threshold_m:
-                reward += self.reward_goal_bonus
-                terminated = True
-                event = "goal_reached"
-                success = True
-                terminated_reason = "goal_reached"
             elif self.episode_step >= self.max_episode_steps:
                 truncated = True
                 event = "max_steps"
@@ -2208,7 +2355,8 @@ def parse_args() -> argparse.Namespace:
         default=DEFAULT_ARENA_LENGTH_M,
         help="Playable arena length (Y), meters; default matches inner size in course_robot_world.sdf.",
     )
-    return parser.parse_args()
+    args, _unknown = parser.parse_known_args()
+    return args
 
 
 def main() -> None:
@@ -2222,7 +2370,10 @@ def main() -> None:
     В блоке finally восстанавливаются потоки и вызываются env.close() и rclpy.shutdown().
     """
     args = parse_args()
-    rclpy.init()
+    init_argv = list(sys.argv)
+    if not any("use_sim_time" in arg for arg in init_argv):
+        init_argv.extend(["--ros-args", "-p", "use_sim_time:=true"])
+    rclpy.init(args=init_argv)
 
     env: gym.Env[np.ndarray, np.ndarray] | None = None
     stdout_file: Any | None = None
